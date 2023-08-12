@@ -1,1 +1,1 @@
-# SVMALandSWMAL
+# Savee's Animation Library(SAL)
