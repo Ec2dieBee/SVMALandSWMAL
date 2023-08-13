@@ -4,3 +4,5 @@ Still in beta,check lua/svmal/userdoc/(Chinese Version Only) for functions
 # WTF is this
 To let ur playermodel(ValveBiped model) play other models(Still ValveBiped)' animations so you can be lazy lol
 (When is NSP2W?)
+#SAL Addons Requirements
+All of it: SAL(or SVMAL,SWMAL,whatever u say lol)
