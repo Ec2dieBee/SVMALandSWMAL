@@ -381,6 +381,7 @@ end
 	>>RotateAng Angle,旋转角度
 	>>NoPitch bool,上下看时视觉模型不会跟着转
 	>>Spine bool,动画包括腰部(和头部) --没做
+	>>Fullbody bool,全身动画 --没做
 	-->>Invert Bool,反转左右手(让左手干右手的活) --没好 --OBS?
 	-->>AffectView Bool,是否干预玩家视野
 	-->>Queue Bool,是否排队执行(当它被设置时不管动画能否被覆写都将排队执行) 没做
@@ -481,6 +482,40 @@ hook.Add("Think","savee_svmal_stuff",function()
 		end
 	end
 end)
+
+--[[
+	测试功能区域
+]]
+
+local function TestFunction(p,fl)
+
+
+	local nb = p:GetBoneCount()
+	local TargetBone = p:LookupBone("ValveBiped.Bip01_Spine")
+	local ChildBone = {
+		[TargetBone] = true
+	}
+	local mat = p:GetBoneMatrix(TargetBone)
+	if !mat then return end
+	local AngDelta = Angle(10,0)
+	
+	for i=0,nb-1 do
+
+		if !ChildBone[p:GetBoneParent(i)] then continue end
+		ChildBone[i] = true
+		local bmat = p:GetBoneMatrix(i)
+		local Delta,DAng = WorldToLocal(bmat:GetTranslation(),bmat:GetAngles(),mat:GetTranslation(),mat:GetAngles())
+		local LPos,LAng = LocalToWorld(Delta,DAng,mat:GetTranslation(),mat:GetAngles()-Angle(0,200,0))
+		--Delta:Rotate(AngDelta)
+		bmat:SetTranslation(LPos)
+		bmat:SetAngles(LAng)
+		p:SetBoneMatrix(i, bmat)
+
+	end
+
+
+end
+
 --[[
 	设置模型->比对模型骨骼间距离(反正就左右手)->自动在动画上应用->泰裤辣
 
@@ -494,9 +529,13 @@ end)
 	WorldToLocal(pos1,pos2)
 	pos2到pos1需要移动的距离
 ]]
+
 hook.Add("PrePlayerDraw","savee_svmal_tpvanim",function(p,fl)
 	--do return end
 	--local p=Entity(1)
+	--TestFunction(p,fl)
+
+
 	if !istable(p.SWMAL_AnimData) then return end
 
 
@@ -533,6 +572,7 @@ hook.Add("PrePlayerDraw","savee_svmal_tpvanim",function(p,fl)
 
 
 	--设置模型
+	--初始化模型,设置模型动作为默认动作(比对用)
 	local am = p.SWMAL_AnimModel
 	local amc = SWMAL_AnimModelCompare
 	--am:SetSequence(0)
@@ -545,7 +585,7 @@ hook.Add("PrePlayerDraw","savee_svmal_tpvanim",function(p,fl)
 	end
 	amc:SetAngles(p:EyeAngles())
 	amc:SetModel(p:GetModel())
-	amc:SetSequence(0)
+	amc:SetSequence(0) --通常为APose
 	amc:SetupBones()
 	--[[
 		比对每个骨骼的距离(继承自他们父骨骼)
@@ -554,6 +594,7 @@ hook.Add("PrePlayerDraw","savee_svmal_tpvanim",function(p,fl)
 		父骨骼WTL子骨骼,然后应用新系统再LTW回去 ->
 		WorldToLocal(pos1,pos2)
 		pos2到pos1需要移动的距离
+		(后记: 你不应该设置Angles的)
 	]]
 	--记录原模型(玩家当前使用的模型)的骨骼数据
 	for i=0,amc:GetBoneCount()-1 do
@@ -601,7 +642,7 @@ hook.Add("PrePlayerDraw","savee_svmal_tpvanim",function(p,fl)
 
 	end]]
 
-
+	--初始化动画播放数据
 
 	local LerpVal = math.min(1,(CurTime()-AData.AnimStartTime)*PBR*3)
 	local final = (AData.AnimStartTime+(am:SequenceDuration()-AData.Offset_StartTime-AData.Offset_EndTime)/PBR)
@@ -620,7 +661,7 @@ hook.Add("PrePlayerDraw","savee_svmal_tpvanim",function(p,fl)
 	am:SetAngles(finalang)
 
 
-
+	--初始化动画模型+动画执行
 	--print("Q2")
 	--print(WorldToLocal(matvmr:GetTranslation(),p:EyeAngles(),p:EyePos(),p:EyeAngles()))
 	am:SetModel(AData.Model)
@@ -647,22 +688,19 @@ hook.Add("PrePlayerDraw","savee_svmal_tpvanim",function(p,fl)
 		am:SetBoneMatrix(i,mtx)
 	end]]
 	local amnb = am:GetBoneCount()
-
+	--开始应用原骨骼数据(小模型兼容)
 	for i = 0, amnb - 1 do
+		
 		local name = am:GetBoneName(i)
-		--!RightArmBone[name] and !LeftArmBone[name] or 
+
 		if !MyBonePosition[name] then continue end
+
 		local mtx = am:GetBoneMatrix(i)
 		local mtxp = am:GetBoneMatrix(am:GetBoneParent(i))
+
 		if !mtx or !mtxp then continue end
-		----local OldLPos,OldLAng = WorldToLocal(RawBonePosAng[i].pos,RawBonePosAng[i].ang,RawBonePosAng[pbi].pos,RawBonePosAng[pbi].ang)
+
 		local pos,ang = mtxp:GetTranslation(),mtxp:GetAngles()
-		--MyBonePosition[name].Pos:Rotate(MyBonePosition[name].Ang)
-		--print(mtxp:GetAngles(),MyBonePosition[name].ParentAng)
-		--print(MyBonePosition[name].Ang,WTLA)
-		--local LPos,LAng = LocalToWorld(MyBonePosition[name].Pos,MyBonePosition[name].Ang,pos,ang)
-		--local LPos,_ = LocalToWorld(BoneDelta[i].Pos,Angle(),pos,Angle())
-		--local _,LAng = LocalToWorld(Vector(),BoneDelta[i].Ang,Vector(),ang)
 		local LPos = LocalToWorld(MyBonePosition[name].Pos,MyBonePosition[name].Ang,pos,ang)
 		--mtx:SetTranslation(pos)
 		--mtx:SetAngles(ang)
@@ -670,7 +708,10 @@ hook.Add("PrePlayerDraw","savee_svmal_tpvanim",function(p,fl)
 		--mtx:SetAngles(LAng)
 		--print("??")
 		am:SetBoneMatrix(i,mtx)
+
 	end
+
+	--原SVMAL
 
 	local amrhbi = am:LookupBone("ValveBiped.Bip01_R_UpperArm")
 	local vmrhbi = p:LookupBone("ValveBiped.Bip01_R_UpperArm") --or am:LookupBone("R_UpperArm")
@@ -700,7 +741,8 @@ hook.Add("PrePlayerDraw","savee_svmal_tpvanim",function(p,fl)
 	am:SetMaterial("savee/transchand/invisiblemat/invisiblemat")
 	am:SetRenderOrigin(p:GetPos())
 	local ang = p:EyeAngles()
-	ang.p = math.Clamp(ang.p, -70, 70)
+	local ClampVal = AData.Spine and 45 or 70
+	ang.p = math.Clamp(ang.p, -ClampVal, ClampVal)
 	if AData.NoPitch then
 		ang.p = 0
 	end
@@ -710,58 +752,176 @@ hook.Add("PrePlayerDraw","savee_svmal_tpvanim",function(p,fl)
 	am:SetRenderAngles(ang)
 	am:DrawModel()
 
-	local deltaR = WorldToLocal(matamr:GetTranslation(),Angle(),pos1,Angle())
-	local deltaL = WorldToLocal(mataml:GetTranslation(),Angle(),pos2,Angle())
 	--deltaL:Rotate(Angle(0,0,0))
-	
-	for i = 0, amnb - 1 do --矫正手
-		--print("EX?")
-		local mat = am:GetBoneMatrix( i )
-		if ( !mat ) then continue end
-		if LeftArmBone[am:GetBoneName(i)] then
-			mat:SetTranslation(mat:GetTranslation()-deltaL)
-		elseif !AData.OneHand then
-			mat:SetTranslation(mat:GetTranslation()-deltaR)
-		end
-		am:SetBoneMatrix( i, mat )
-	end
+	if AData.Spine then --矫正腰
+		--[[local nb = p:GetBoneCount() --设置部分
+		local TargetBone = p:LookupBone("ValveBiped.Bip01_Spine")
+		local ChildBone = {
+			[TargetBone] = true
+		}
+		local mat = p:GetBoneMatrix(TargetBone)
+		if !mat then return end
+		local AngDelta = Angle(10,0)
 
+		for i=0,nb-1 do 
+
+			if !ChildBone[p:GetBoneParent(i)] then continue end
+			ChildBone[i] = true
+			local bmat = p:GetBoneMatrix(i)
+			local Delta,DAng = WorldToLocal(bmat:GetTranslation(),bmat:GetAngles(),mat:GetTranslation(),mat:GetAngles())
+			local LPos,LAng = LocalToWorld(Delta,DAng,mat:GetTranslation(),mat:GetAngles()-Angle(0,200,0))
+			--Delta:Rotate(AngDelta)
+			bmat:SetTranslation(LPos)
+			bmat:SetAngles(LAng)
+			p:SetBoneMatrix(i, bmat)
+
+		end]]
+		--WSSB
+		local TargetBone = p:LookupBone("ValveBiped.Bip01_Spine")
+		local TargetBoneAM = am:LookupBone("ValveBiped.Bip01_Spine")
+		local mat = p:GetBoneMatrix(TargetBone)
+		local matAM = am:GetBoneMatrix(TargetBoneAM)
+		if !mat or !matAM then return end
+		local ChildBone = {
+			[TargetBoneAM] = true
+		}
+		local delta = WorldToLocal(matAM:GetTranslation(),Angle(),mat:GetTranslation(),Angle())
+		for i = 0, amnb - 1 do
+			--print("EX?")
+			if !ChildBone[am:GetBoneParent(i)] then continue end
+			ChildBone[i] = true
+			local mat = am:GetBoneMatrix( i )
+			if ( !mat ) then continue end
+			mat:SetTranslation(mat:GetTranslation()-delta)
+			am:SetBoneMatrix( i, mat )
+		end
+
+	else --矫正手
+		local deltaR = WorldToLocal(matamr:GetTranslation(),Angle(),pos1,Angle())
+		local deltaL = WorldToLocal(mataml:GetTranslation(),Angle(),pos2,Angle())
+		for i = 0, amnb - 1 do
+			--print("EX?")
+			local mat = am:GetBoneMatrix( i )
+			if ( !mat ) then continue end
+			if LeftArmBone[am:GetBoneName(i)] then
+				mat:SetTranslation(mat:GetTranslation()-deltaL)
+			elseif !AData.OneHand then
+				mat:SetTranslation(mat:GetTranslation()-deltaR)
+			end
+			am:SetBoneMatrix( i, mat )
+		end
+	end
 	--local Parent = {}
 	local RawBonePosAng = {}
-	for i=0,p:GetBoneCount()-1 do
-		local name = p:GetBoneName(i)
-		--print(AName,name)
-		local mtx = p:GetBoneMatrix(i)
-		if ( !mtx ) then continue end
-		RawBonePosAng[i] = {
-			pos = mtx:GetTranslation(),
-			ang = mtx:GetAngles()
-		}
-		if (AData.OneHand or !RightArmBone[name]) and !LeftArmBone[name] then continue end
-		local iAM = am:LookupBone(name)
-		local AName = iAM and am:GetBoneName(iAM)
-		if iAM and AName != "__INVALIDBONE__" and (!AData.OneHand or !RightArmBone[name]) then
-			local Imtx = am:GetBoneMatrix(iAM)
-			if !mtx or !Imtx then continue end
-			mtx:SetTranslation(LerpVector(LerpVal,mtx:GetTranslation(),Imtx:GetTranslation()))
-			mtx:SetAngles(LerpAngle(LerpVal,mtx:GetAngles(),Imtx:GetAngles()))
-			--print(name,AName,p:GetBoneCount())
-			--PrintTable(p:GetChildBones(i))
+	if AData.Spine then
+		
+		local nb = p:GetBoneCount() --设置部分
 
-			--print("DRAW")
-		elseif !iAM or AName == "__INVALIDBONE__" then
-			local pbi = p:GetBoneParent(i)
-			local ParentMatrix = p:GetBoneMatrix(pbi)
-			if !ParentMatrix then continue end
-			local OldLPos,OldLAng = WorldToLocal(RawBonePosAng[i].pos,RawBonePosAng[i].ang,RawBonePosAng[pbi].pos,RawBonePosAng[pbi].ang)
-			local LPos,LAng = LocalToWorld(OldLPos,OldLAng,ParentMatrix:GetTranslation(),ParentMatrix:GetAngles())
-			mtx:SetTranslation(LPos)
-			mtx:SetAngles(LAng)
+		local TargetBone = p:LookupBone("ValveBiped.Bip01_Spine")
+		local ChildBone = {
+			[TargetBone] = true
+		}
+		
+		local Spinemat = p:GetBoneMatrix(TargetBone)
+		--local SpinematAM = am:GetBoneMatrix(am:LookupBone("ValveBiped.Bip01_Spine"))
+		--if !Spinemat or !SpinematAM then return end
+		if !Spinemat then return end
+		for i=0,nb-1 do
+			local name = p:GetBoneName(i)
+			--print(AName,name)
+			local mtx = p:GetBoneMatrix(i)
+			if ( !mtx ) then continue end
+			RawBonePosAng[i] = {
+				pos = mtx:GetTranslation(),
+				ang = mtx:GetAngles()
+			}
+			if !ChildBone[p:GetBoneParent(i)] then continue end
+			ChildBone[i] = true
+			local iAM = am:LookupBone(name)
+			local AName = iAM and am:GetBoneName(iAM)
+			if iAM and AName != "__INVALIDBONE__" and (AData.Spine or !AData.OneHand or !RightArmBone[name]) then
+				local Imtx = am:GetBoneMatrix(iAM)
+				if !mtx or !Imtx then continue end
+				mtx:SetTranslation(LerpVector(LerpVal,mtx:GetTranslation(),Imtx:GetTranslation()))
+				mtx:SetAngles(LerpAngle(LerpVal,mtx:GetAngles(),Imtx:GetAngles()))
+				local Delta,DAng = WorldToLocal(mtx:GetTranslation(),mtx:GetAngles(),Spinemat:GetTranslation(),Spinemat:GetAngles())
+				--local LPos,LAng = LocalToWorld(Delta,DAng,Spinemat:GetTranslation(),(RawBonePosAng[TargetBone].ang-SpinematAM:GetAngles())/2)
+				local LPos,LAng = LocalToWorld(Delta,DAng,Spinemat:GetTranslation(),Spinemat:GetAngles())
+				--Delta:Rotate(AngDelta)
+				mtx:SetTranslation(LPos)
+				mtx:SetAngles(LAng)
+				--print(name,AName,p:GetBoneCount())
+				--PrintTable(p:GetChildBones(i))
+
+				--print("DRAW")
+			elseif !iAM or AName == "__INVALIDBONE__" then
+				local pbi = p:GetBoneParent(i)
+				local ParentMatrix = p:GetBoneMatrix(pbi)
+				if !ParentMatrix then continue end
+				local OldLPos,OldLAng = WorldToLocal(RawBonePosAng[i].pos,RawBonePosAng[i].ang,RawBonePosAng[pbi].pos,RawBonePosAng[pbi].ang)
+				local LPos,LAng = LocalToWorld(OldLPos,OldLAng,ParentMatrix:GetTranslation(),ParentMatrix:GetAngles())
+				mtx:SetTranslation(LPos)
+				mtx:SetAngles(LAng)
+			end
+			--mtx:SetTranslation(mtx:GetTranslation()+Vector(0,0,10))
+			--mtx:Rotate(Angle(0,0,10))
+			p:SetBoneMatrix(i,mtx)
+			p:SetBonePosition(i,mtx:GetTranslation(),mtx:GetAngles())
 		end
-		--mtx:SetTranslation(mtx:GetTranslation()+Vector(0,0,10))
-		--mtx:Rotate(Angle(0,0,10))
-		p:SetBoneMatrix(i,mtx)
-		p:SetBonePosition(i,mtx:GetTranslation(),mtx:GetAngles())
+		
+
+		--[[for i=0,nb-1 do 
+
+			local iAM = am:LookupBone(name)
+			local AName = iAM and am:GetBoneName(iAM)
+			if !ChildBone[p:GetBoneParent(i)] or !iAM or AName == "__INVALIDBONE__" then continue end
+			ChildBone[i] = true
+			local bmat = p:GetBoneMatrix(i)
+			local Delta,DAng = WorldToLocal(bmat:GetTranslation(),bmat:GetAngles(),Spinemat:GetTranslation(),Spinemat:GetAngles())
+			local LPos,LAng = LocalToWorld(Delta,DAng,Spinemat:GetTranslation(),Spinemat:GetTranslation()-(SpineMat:GetAngles()-am:GetBoneMatrix()))
+			--Delta:Rotate(AngDelta)
+			bmat:SetTranslation(LPos)
+			bmat:SetAngles(LAng)
+			p:SetBoneMatrix(i, bmat)
+
+		end]]
+		
+	else
+		for i=0,p:GetBoneCount()-1 do
+			local name = p:GetBoneName(i)
+			--print(AName,name)
+			local mtx = p:GetBoneMatrix(i)
+			if ( !mtx ) then continue end
+			RawBonePosAng[i] = {
+				pos = mtx:GetTranslation(),
+				ang = mtx:GetAngles()
+			}
+			if (AData.OneHand or !RightArmBone[name]) and !LeftArmBone[name] then continue end
+			local iAM = am:LookupBone(name)
+			local AName = iAM and am:GetBoneName(iAM)
+			if iAM and AName != "__INVALIDBONE__" and (!AData.OneHand or !RightArmBone[name]) then
+				local Imtx = am:GetBoneMatrix(iAM)
+				if !mtx or !Imtx then continue end
+				mtx:SetTranslation(LerpVector(LerpVal,mtx:GetTranslation(),Imtx:GetTranslation()))
+				mtx:SetAngles(LerpAngle(LerpVal,mtx:GetAngles(),Imtx:GetAngles()))
+				--print(name,AName,p:GetBoneCount())
+				--PrintTable(p:GetChildBones(i))
+
+				--print("DRAW")
+			elseif !iAM or AName == "__INVALIDBONE__" then
+				local pbi = p:GetBoneParent(i)
+				local ParentMatrix = p:GetBoneMatrix(pbi)
+				if !ParentMatrix then continue end
+				local OldLPos,OldLAng = WorldToLocal(RawBonePosAng[i].pos,RawBonePosAng[i].ang,RawBonePosAng[pbi].pos,RawBonePosAng[pbi].ang)
+				local LPos,LAng = LocalToWorld(OldLPos,OldLAng,ParentMatrix:GetTranslation(),ParentMatrix:GetAngles())
+				mtx:SetTranslation(LPos)
+				mtx:SetAngles(LAng)
+			end
+			--mtx:SetTranslation(mtx:GetTranslation()+Vector(0,0,10))
+			--mtx:Rotate(Angle(0,0,10))
+			p:SetBoneMatrix(i,mtx)
+			p:SetBonePosition(i,mtx:GetTranslation(),mtx:GetAngles())
+		end
 	end
 	--p:SetupBones()
 
@@ -1347,6 +1507,7 @@ concommand.Add("swmal_debug_playanimSL",function(p,_,a)
 			Model = "models/Police.mdl",
 			OneHand = false,
 			NoPitch = false,
+			Spine = !false,
 			RotateAng = Angle(0,0,0),
 		})
 	end
