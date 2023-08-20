@@ -5,6 +5,7 @@
 	(这东西通篇抄袭Armmelee,因为我懒得传了)
 	哦对了这个文件有制表符(TAB,或者四个空格)
 	所以当你看不到制表符的时候请换用VSC(Visual Studio Code)
+	(或者去Github页面, https://github.com/Ec2dieBee/SVMALandSWMAL)
 	(如果还不行那我没办法了)
 ]]
 --[[
@@ -21,6 +22,23 @@
 	(别说一些像"哦泻为毛有中文注释"的傻逼话,因为这个文件 不 是 给 你 的 (划重点))
 
 ]]
+
+--Github link: https://github.com/Ec2dieBee/SVMALandSWMAL
+
+--[[
+	SAL
+	当前版本
+	(LOCAL V0.8)
+	要做的
+	重写动作执行(配合下面俩逼养的)
+	衔接(Queue,包括WM(考虑一下)和VM)
+	做完衔接了发工坊
+
+	NSP2W When???
+
+	回归原始.mpeg
+	NSP2W必须被提上议程,必须被提上
+]]
 --do return end
 
 local LerpVector = LerpVector
@@ -33,9 +51,11 @@ local LerpAngle = LerpAngle
 --end
 
 SAVEE_TEMP_SVMAL_RELATEDSHIT = SAVEE_TEMP_SVMAL_RELATEDSHIT
+SAVEE_TEMP_SVMAL_RELATEDSHITCMP = SAVEE_TEMP_SVMAL_RELATEDSHITCMP --你说得对,但是这里是Compare的缩写,实际上这东西甚至不应改叫Delta,因为本身这BVVD玩意就是衔接哥
 
 local NoViewModel
 local AnimMdl = SAVEE_TEMP_SVMAL_RELATEDSHIT
+local AnimMdlDelta = SAVEE_TEMP_SVMAL_RELATEDSHITCMP
 local RECHECKED
 
 local MDLForceLH = {
@@ -176,6 +196,7 @@ local Cinema = !true
 SVMAL = {
 	_ValPlayingAnim = false,
 	_ValCurrentAnimData = {},
+	_QueueTable = {},
 }
 
 function SVMAL.SetAnimPlaying(state)
@@ -197,7 +218,7 @@ end
 function SVMAL.CreateAnimModel()
 
 	if !IsValid(LocalPlayer()) then return end
-	if IsValid(AnimMdl) then Error("[SVMAL] There's already a AnimModel!") return end
+	if IsValid(AnimMdl) then Error("[SVMAL] There's already an AnimModel!") return end
 
 	local p = IsValid(LocalPlayer():GetObserverTarget()) and LocalPlayer():GetObserverTarget() or LocalPlayer()
 	--print("?2")
@@ -228,13 +249,57 @@ function SVMAL.CreateAnimModel()
 	end
 
 	if !IsValid(AnimMdl) then --保险(CLENT有最大上限,一过你就4辣)
-		Error("[SVMAL] InValid Animation Model ! Maybe the clientside entity count reach the limit?") 
+		Error("[SVMAL] InValid Animation Model ! Maybe the clientside entities count reaches the limit?") 
 		return
 	end
 	--print("?")
 	debug.setmetatable(AnimMdl,NewCSEntMeta)
 	--debug.setmetatable(any object, table metatable)
 	return AnimMdl
+
+end
+
+function SVMAL.CreateAnimModelDelta()
+
+	if !IsValid(LocalPlayer()) then return end
+	if IsValid(AnimMdlDelta) then Error("[SVMAL] There's already an AnimModel!") return end
+
+	local p = IsValid(LocalPlayer():GetObserverTarget()) and LocalPlayer():GetObserverTarget() or LocalPlayer()
+	--print("?2")
+	if !p:IsPlayer() then return end
+
+	SAVEE_TEMP_SVMAL_RELATEDSHITCMP = ClientsideModel(p:GetModel())
+	AnimMdlDelta = SAVEE_TEMP_SVMAL_RELATEDSHITCMP
+
+	if AnimMdlDelta:GetParent() != p:GetViewModel() then
+		AnimMdlDelta:SetTransmitWithParent(true)
+		AnimMdlDelta:DrawShadow(false)
+		AnimMdlDelta:SetParent(p:GetViewModel())
+		AnimMdlDelta:AddEffects(EF_PARENT_ANIMATES)
+		AnimMdlDelta:SetPos(p:EyePos())
+		AnimMdlDelta:SetAngles(p:EyeAngles())
+	end
+
+	AnimMdlDelta:SetNoDraw(true)
+	AnimMdlDelta:DrawShadow(false)
+	--AnimMdlDelta:SetMaterial("savee/transchand/invisiblemat/invisiblemat")
+	--AnimMdl:AddEffects(E)
+	AnimMdlDelta.RenderOverride = function(self,fl) 
+		render.SetShadowsDisabled(true)
+		self:DrawShadow(false)
+		self:SetRenderOrigin(p:EyePos()+p:GetAimVector()*5)
+		self:MarkShadowAsDirty()
+		self:DrawModel(fl)
+	end
+
+	if !IsValid(AnimMdlDelta) then --保险(CLENT有最大上限,一过你就4辣)
+		Error("[SVMAL] InValid Animation Model ! Maybe the clientside entities count reaches the limit?") 
+		return
+	end
+	--print("?")
+	debug.setmetatable(AnimMdlDelta,NewCSEntMeta)
+	--debug.setmetatable(any object, table metatable)
+	return AnimMdlDelta
 
 end
 
@@ -246,6 +311,16 @@ function SVMAL.GetAnimModel()
 	end
 
 	return AnimMdl
+
+end
+
+function SVMAL.GetAnimModelDelta()
+
+	if !IsValid(AnimMdlDelta) then
+		AnimMdlDelta = SVMAL.CreateAnimModelDelta()
+	end
+
+	return AnimMdlDelta
 
 end
 
@@ -273,7 +348,50 @@ function SVMAL.SetCurrentAnimData(Data)
 	if !istable(Data) then Error("[SVMAL] Data is NOT a TABLE!") end
 	local OldData = SVMAL.GetCurrentAnimData() --SVMAL._ValCurrentAnimData
 	SVMAL._ValCurrentAnimData = Data
-	return OldData
+	return Data,OldData
+end
+
+function SVMAL.GetQueueTable()
+	--if !SVMAL.GetAnimPlaying() then return end
+	return table.Copy(SVMAL._QueueTable)
+end
+
+function SVMAL.RemoveQueueTableData(index)
+	table.remove(SVMAL._QueueTable, index or 1)
+end
+
+function SVMAL.AddQueuedData(Data)
+	if !istable(Data) then Error("[SVMAL] Data is NOT a TABLE!") end
+	--local OldData = SVMAL.GetCurrentAnimData() --SVMAL._ValCurrentAnimData
+	SVMAL._QueueTable[#SVMAL._QueueTable + 1] = Data
+end
+
+function SVMAL.TryQueue()
+
+	local QueueTbl = SVMAL.GetQueueTable()
+	if #QueueTbl > 0 then 
+
+		if !IsValid(AnimMdl) then
+			AnimMdl = SVMAL.CreateAnimModel()
+		end
+		if !IsValid(AnimMdlDelta) then
+			AnimMdlDelta = SVMAL.CreateAnimModelDelta()
+		end
+
+		local AData = SVMAL.GetCurrentAnimData()
+		local QT = QueueTbl[1]
+		QT.Queue = false
+		AnimMdlDelta:SetModel(AData.Model)
+		local Anim = isstring(AData.Anim) and AnimMdlDelta:LookupSequence(AData.Anim) or AData.Anim
+		AnimMdlDelta:ResetSequence(Anim)
+		AnimMdlDelta:SetPlaybackRate(0)
+		AnimMdlDelta:SetCycle(AnimMdl:GetCycle())
+		--print(AnimMdl:GetModel(),QT.Model,AnimMdl:GetSequence())
+		SVMAL.StartAnimation(QT).InQueue = true
+		SVMAL.RemoveQueueTableData()
+
+	end
+
 end
 
 --[[
@@ -285,9 +403,9 @@ end
 	>>PlaybackRate Num,播放速度(默认1) --好了
 	>>Offset_StartTime Num,开始时间偏移 --好了
 	>>Offset_EndTime Num,结束时间偏移 --好了
-	>>AllowOverride 是否允许被覆盖(String) 没做
+	>>AllowOverride 是否允许被覆盖(String) (做了又好像没做)
 	>>OnFinish Function,在动画结束后做什么 --好了
-	>>OnStart Function,在动画开始时做什么 没做
+	>>OnStart Function,在动画开始时做什么
 	>>Queue Bool,是否排队执行(当它被设置时不管动画能否被覆写都将排队执行) 没做
 	>>KeepBoneData Bool,保留对骨骼的修改(换模型时无效..?) 好了
 	-->>AffectView Bool,是否干预玩家视野
@@ -296,7 +414,6 @@ end
 	>>NoPitch bool,上下看时视觉模型不会跟着转
 
 ]]
-local QueueTable = {}
 
 function SVMAL.StartAnimation(animtbl)
 
@@ -309,6 +426,7 @@ function SVMAL.StartAnimation(animtbl)
 	animtbl.Offset_StartTime = animtbl.Offset_StartTime or 0
 	animtbl.Offset_EndTime = animtbl.Offset_EndTime or 0
 	animtbl.AutoDecideHands = (animtbl.AutoDecideHands != nil and animtbl.AutoDecideHands or true)
+	animtbl.InQueue = false
 	--animtbl.RotateAng = animtbl.RotateAng and animtbl.RotateAng-Angle(30,0,0) or Angle(-30,0,0)
 
 
@@ -338,23 +456,23 @@ function SVMAL.StartAnimation(animtbl)
 		--print("?")
 	end
 
-	--初始化
-	animtbl.AnimStartTime = CurTime()
-	if Mdl then AnimMdl:SetModel(Mdl) end
-	AnimMdl:SetupBones()
-
-	if !NoResetMod then
-		SVMAL.ResetManipulateData()
-	end
-
-	if isstring(Anim) then
-		Anim = AnimMdl:LookupSequence(Anim)
-	end
-	SVMAL.SetAnimPlaying(true)
 
 	
 	--正事
 	if !NeedQueue and !OldAnimData.AllowOverride then
+
+		--初始化
+		animtbl.AnimStartTime = CurTime()
+		if Mdl then AnimMdl:SetModel(Mdl) end
+		AnimMdl:SetupBones()
+
+		if !NoResetMod then
+			SVMAL.ResetManipulateData()
+		end
+
+		if isstring(Anim) then
+			Anim = AnimMdl:LookupSequence(Anim)
+		end
 
 		SVMAL.SetCurrentAnimData(animtbl)
 		AnimMdl:SetPlaybackRate(PBR)
@@ -363,6 +481,20 @@ function SVMAL.StartAnimation(animtbl)
 		if isfunction(OnStart) then
 			OnStart(OldAnimData)
 		end
+		--print("AMOGUS")
+		SVMAL.SetAnimPlaying(true)
+
+		SVMAL._ValFinishCalled = nil
+		SVMAL._ValQueueFinishCalled = nil
+
+		return SVMAL._ValCurrentAnimData
+		
+	else
+
+		--print("AMOGUS2")
+		SVMAL.AddQueuedData(animtbl)
+
+		return animtbl
 
 	end
 
@@ -380,7 +512,7 @@ end
 	>>KeepBoneData Bool,保留对骨骼的修改(换模型时无效..?)(默认开) 好了
 	>>RotateAng Angle,旋转角度
 	>>NoPitch bool,上下看时视觉模型不会跟着转
-	>>Spine bool,动画包括腰部(和头部) --没做
+	>>Spine bool,动画包括腰部(和头部) --好了
 	>>Fullbody bool,全身动画 --没做
 	-->>Invert Bool,反转左右手(让左手干右手的活) --没好 --OBS?
 	-->>AffectView Bool,是否干预玩家视野
@@ -392,7 +524,7 @@ end
 
 --未记录
 
-function SVMAL.StartWMAnimation(p,animtbl)
+function SVMAL.StartWMAnimation(p,animtbl,broadcast)
 
 	--基本设置(值)
 	if !IsValid(p) or !istable(animtbl) then return end
@@ -457,6 +589,11 @@ function SVMAL.StartWMAnimation(p,animtbl)
 		p.SWMAL_AnimData = animtbl
 		AnimMdl:SetPlaybackRate(PBR)
 		AnimMdl:ResetSequence(Anim)
+		if broadcast then
+			net.Start("SWMAL_BROADCASTANIMATIONINFO")
+				net.WriteTable(animtbl)
+			net.SendToServer()
+		end
 
 		--[[if isfunction(OnStart) then
 			OnStart(OldAnimData)
@@ -474,12 +611,18 @@ hook.Add("Think","savee_svmal_stuff",function()
 	if !AData.AnimStartTime then return end
 	local PBR=AData.PlaybackRate
 	local Cycle = (CurTime()-AData.AnimStartTime+AData.Offset_StartTime)/AnimMdl:SequenceDuration()*PBR
+	local CycleDelta = (CurTime()-AData.AnimStartTime+AData.Offset_StartTime+AData.Offset_EndTime)/AnimMdl:SequenceDuration()*PBR
 	if Cycle >= 1.02 then
 		SVMAL.SetAnimPlaying(false)
-		if !AData._ValFinishCalled and AData.OnFinish then 
-			AData.OnFinish(AData) 
+		if !AData._ValFinishCalled then 
+			if isfunction(AData.OnFinish) then AData.OnFinish(AData) end
 			AData._ValFinishCalled = true
+			--print("QUICKQUEUET")
 		end
+	end
+	if CycleDelta >= 1 and !AData._ValQueueFinishCalled then
+		AData._ValQueueFinishCalled = true
+		SVMAL.TryQueue()
 	end
 end)
 
@@ -540,7 +683,7 @@ hook.Add("PrePlayerDraw","savee_svmal_tpvanim",function(p,fl)
 
 
 	
-	p:SetupBones()
+	--p:SetupBones()
 	--p:SetLOD(0)
 	--if !p.SWMAL_AnimData then return end
 	--TPV动画模型
@@ -779,6 +922,7 @@ hook.Add("PrePlayerDraw","savee_svmal_tpvanim",function(p,fl)
 		--WSSB
 		local TargetBone = p:LookupBone("ValveBiped.Bip01_Spine")
 		local TargetBoneAM = am:LookupBone("ValveBiped.Bip01_Spine")
+		if !TargetBone or !TargetBoneAM then return end
 		local mat = p:GetBoneMatrix(TargetBone)
 		local matAM = am:GetBoneMatrix(TargetBoneAM)
 		if !mat or !matAM then return end
@@ -813,6 +957,7 @@ hook.Add("PrePlayerDraw","savee_svmal_tpvanim",function(p,fl)
 	end
 	--local Parent = {}
 	local RawBonePosAng = {}
+	p:SetupBones()
 	if AData.Spine then
 		
 		local nb = p:GetBoneCount() --设置部分
@@ -826,6 +971,9 @@ hook.Add("PrePlayerDraw","savee_svmal_tpvanim",function(p,fl)
 		--local SpinematAM = am:GetBoneMatrix(am:LookupBone("ValveBiped.Bip01_Spine"))
 		--if !Spinemat or !SpinematAM then return end
 		if !Spinemat then return end
+		local mat = p:GetBoneMatrix(p:LookupBone("ValveBiped.Bip01_R_UpperArm"))
+		matamr = am:GetBoneMatrix(amrhbi)
+		if !mat then return end
 		for i=0,nb-1 do
 			local name = p:GetBoneName(i)
 			--print(AName,name)
@@ -839,7 +987,7 @@ hook.Add("PrePlayerDraw","savee_svmal_tpvanim",function(p,fl)
 			ChildBone[i] = true
 			local iAM = am:LookupBone(name)
 			local AName = iAM and am:GetBoneName(iAM)
-			if iAM and AName != "__INVALIDBONE__" and (AData.Spine or !AData.OneHand or !RightArmBone[name]) then
+			if iAM and AName != "__INVALIDBONE__" and (!AData.OneHand or !RightArmBone[name]) then
 				local Imtx = am:GetBoneMatrix(iAM)
 				if !mtx or !Imtx then continue end
 				mtx:SetTranslation(LerpVector(LerpVal,mtx:GetTranslation(),Imtx:GetTranslation()))
@@ -854,7 +1002,7 @@ hook.Add("PrePlayerDraw","savee_svmal_tpvanim",function(p,fl)
 				--PrintTable(p:GetChildBones(i))
 
 				--print("DRAW")
-			elseif !iAM or AName == "__INVALIDBONE__" then
+			elseif !iAM or AName == "__INVALIDBONE__" or (AData.OneHand and RightArmBone[name]) then
 				local pbi = p:GetBoneParent(i)
 				local ParentMatrix = p:GetBoneMatrix(pbi)
 				if !ParentMatrix then continue end
@@ -964,15 +1112,26 @@ hook.Add("PreDrawPlayerHands","savee_svmal_stuff",function(hand,vm,p) --干预�
 	local AData = SVMAL.GetCurrentAnimData()
 	local PBR=AData.PlaybackRate
 	local Cycle = (CurTime()-AData.AnimStartTime+AData.Offset_StartTime)/AnimMdl:SequenceDuration()*PBR
+	local CycleDelta = (CurTime()-AData.AnimStartTime+AData.Offset_StartTime+AData.Offset_EndTime)/AnimMdl:SequenceDuration()*PBR
 	if Cycle >= 1.02 then
 		SVMAL.SetAnimPlaying(false)
-		if !AData._ValFinishCalled and AData.OnFinish then 
-			AData.OnFinish(AData) 
+		if !AData._ValFinishCalled then 
+			if isfunction(AData.OnFinish) then AData.OnFinish(AData) end
 			AData._ValFinishCalled = true
+			SVMAL.TryQueue()
+			--print("QUICKQUEUE")
 		end
+	end
+	if !AData._ValQueueFinishCalled and CycleDelta >= 1 then
+		AData._ValQueueFinishCalled = true
+		SVMAL.TryQueue()
 	end
 	if !IsValid(AnimMdl) then
 		AnimMdl = SVMAL.CreateAnimModel()
+		return 
+	end
+	if !IsValid(AnimMdlDelta) then
+		AnimMdlDelta = SVMAL.CreateAnimModelDelta()
 		return 
 	end
 	--[[if AnimMdl:GetParent() != vm then
@@ -1030,12 +1189,17 @@ hook.Add("PreDrawPlayerHands","savee_svmal_stuff",function(hand,vm,p) --干预�
 			if !IsValid(vm) then return end
 			local w=p:GetActiveWeapon()
 			if !IsValid(w) then return end
+
+			--基本值
 			local am = AnimMdl
+
+			--除错
 			if !IsValid(am) then
 				AnimMdl = SVMAL.CreateAnimModel()
 				return 
 			end
 			am:SetupBones()
+
 			local amnb = am:GetBoneCount()
 			if !IsValid(hand) then hand = p:GetHands() end
 			if hand:GetParent() != vm then
@@ -1130,6 +1294,62 @@ hook.Add("PreDrawPlayerHands","savee_svmal_stuff",function(hand,vm,p) --干预�
 				--mat:Rotate(Angle(0,90,0))
 				am:SetBoneMatrix( i, mat )
 			end
+
+
+			local amd = AnimMdlDelta
+
+			if !IsValid(amd) then
+				AnimMdlDelta = SVMAL.CreateAnimModelDelta()
+				return 
+			end
+
+			amd:SetupBones()
+
+			if AData.InQueue then --单独设置
+
+
+				local amrhbi = amd:LookupBone("ValveBiped.Bip01_R_UpperArm")
+				local amlhbi = amd:LookupBone("ValveBiped.Bip01_L_UpperArm")
+
+				if !amrhbi and !amlhbi then return end
+
+				local matamr = amrhbi and amd:GetBoneMatrix( amrhbi ) or Matrix()
+				local mataml = amrhbi and amd:GetBoneMatrix( amlhbi ) or Matrix()
+
+				if !matamr and !matvmr then return end
+
+				local deltaR = WorldToLocal(matamr:GetTranslation(),Angle(),pos1,Angle())
+				local deltaL = WorldToLocal(mataml:GetTranslation(),Angle(),pos2,Angle())
+
+				for i = 0, amd:GetBoneCount() - 1 do --矫正右手
+					--print("EX?")
+					local mat = amd:GetBoneMatrix( i )
+					if ( !mat ) then continue end
+
+					if LeftArmBone[amd:GetBoneName(i)] then
+						mat:SetTranslation(mat:GetTranslation()-deltaL)
+					elseif !AData.OneHand then
+						mat:SetTranslation(mat:GetTranslation()-deltaR)
+					end
+					if Invert then
+						local CurDeltaP,CurDeltaA = WorldToLocal(mat:GetTranslation(),mat:GetAngles(),vm:GetPos(),vm:GetAngles())
+						CurDeltaP.y=-CurDeltaP.y
+						CurDeltaA.y=-CurDeltaA.y
+						CurDeltaA.z=180-CurDeltaA.z
+						CurDeltaA:Normalize()
+
+						local NewP,NewA=LocalToWorld(CurDeltaP,CurDeltaA,vm:GetPos(),vm:GetAngles())
+
+						mat:SetTranslation(NewP)
+						mat:SetAngles(NewA)
+						--mat:Invert()
+					end
+					amd:SetBoneMatrix( i, mat )
+				end
+
+			end
+
+
 			--[[delta = WorldToLocal(NEWVEC[amlhbi],Angle(),matvml:GetTranslation(),Angle())
 			local deltaa = (mataml:GetTranslation()-matvml:GetTranslation()):Angle()
 			local amr_amlang = (mataml:GetTranslation()-matamr:GetTranslation()):Angle()
@@ -1167,8 +1387,10 @@ hook.Add("PreDrawPlayerHands","savee_svmal_stuff",function(hand,vm,p) --干预�
 			local LHMat = LHBI and vm:GetBoneMatrix(LHBI)
 			if !RHMat and !LHMat then return end
 			local LerpVal = math.min(1,(CurTime()-AData.AnimStartTime)*PBR*3)
+			local DoQueue = AData.InQueue
 			if CurTime() >= final then
 				LerpVal = 1-math.min((CurTime()-final)*3,1)
+				DoQueue = nil
 			end
 			for i = 0, nb - 1 do
 					--do break end
@@ -1184,17 +1406,17 @@ hook.Add("PreDrawPlayerHands","savee_svmal_stuff",function(hand,vm,p) --干预�
 				--if IsValid(vm.savee_armmelee_mybase) then
 				--	print(vm:GetBoneName(vm:GetBoneParent(vm:LookupBone(name))))
 				--end
-				local iAM = AnimMdl:LookupBone(name)
+				local iAM = am:LookupBone(name)
 				--[[
 					分2批次,先同步手骨,再同步武器骨骼
 					这么做是为了避免骨骼优先级问题(如c_irifle,它将枪械骨骼放到了第一位,这意味着枪械骨骼将被优先读取)
 				]]
 				--print(name,i,iAM,AnimMdl:GetModel(),(iAM and AnimMdl:GetBoneName(iAM)=="__INVALIDBONE__"))
 				--国民护卫队模型支持
-				local AName = iAM and AnimMdl:GetBoneName(iAM)
+				local AName = iAM and am:GetBoneName(iAM)
 				if iAM and AName != "__INVALIDBONE__" and (!AData.OneHand or !RightArmBone[name]) then
 					--print(name,i)
-					local matAM = AnimMdl:GetBoneMatrix( iAM )
+					local matAM = am:GetBoneMatrix( iAM )
 					--print(":1")
 					--print(iAM)
 					if !matAM --or 
@@ -1203,17 +1425,20 @@ hook.Add("PreDrawPlayerHands","savee_svmal_stuff",function(hand,vm,p) --干预�
 						continue
 					end
 					--print(!AData.OneHand , !RightArmBone[name])
-					mat:SetTranslation(LerpVector(LerpVal,mat:GetTranslation(),matAM:GetTranslation()))
-					mat:SetAngles(LerpAngle(LerpVal,mat:GetAngles(),matAM:GetAngles()))
+					local iAMD = amd:LookupBone(name)
+					local matD = amd:GetBoneMatrix(iAMD or -1)
+					local DoDelta = DoQueue and iAMD and matD and true
+					mat:SetTranslation(LerpVector(LerpVal,(DoDelta and matD:GetTranslation() or mat:GetTranslation()),matAM:GetTranslation()))
+					mat:SetAngles(LerpAngle(LerpVal,(DoDelta and matD:GetAngles() or mat:GetAngles()),matAM:GetAngles()))
 					--mat:Invert()
 					--mat:SetAngles(mat:GetAngles())
 					--mat:SetTranslation(mat:GetTranslation())
 					--print(math.min(1,(CurTime()-final)*3))
 				elseif !iAM or AName == "__INVALIDBONE__" then --同步没有的骨骼
-					--print(name,i)
 					local pbi = vm:GetBoneParent(i)
 					local ParentMatrix = vm:GetBoneMatrix(pbi)
 					if !ParentMatrix then continue end
+					--print(name,i,vm:GetBoneName(pbi))
 					local OldLPos,OldLAng = WorldToLocal(RawBonePosAng[i].pos,RawBonePosAng[i].ang,RawBonePosAng[pbi].pos,RawBonePosAng[pbi].ang)
 					local LPos,LAng = LocalToWorld(OldLPos,OldLAng,ParentMatrix:GetTranslation(),ParentMatrix:GetAngles())
 					mat:SetTranslation(LPos)
@@ -1395,13 +1620,55 @@ hook.Add("PreDrawPlayerHands","savee_svmal_stuff",function(hand,vm,p) --干预�
 		end
 		--mat:Rotate(Angle(0,90,0))
 	end
+
+	local amd = AnimMdlDelta
+
+	if !IsValid(amd) then
+		AnimMdlDelta = SVMAL.CreateAnimModelDelta()
+		return 
+	end
+
+	amd:SetupBones()
+
+	if AData.InQueue then --单独设置
+
+		local amlhbi = amd:LookupBone("ValveBiped.Bip01_L_UpperArm")
+
+		if !amlhbi then return end
+
+		local mataml = amrhbi and amd:GetBoneMatrix( amlhbi ) or Matrix()
+
+		if !mataml or !matvml then return end
+
+		--local deltaR = WorldToLocal(matamr:GetTranslation(),Angle(),pos1,Angle())
+		local deltaL = WorldToLocal(mataml:GetTranslation(),Angle(),pos2,Angle())
+
+		for i = 0, amd:GetBoneCount() - 1 do
+			--print("EX?")
+			local mat = amd:GetBoneMatrix( i )
+			if ( !mat ) then continue end
+			--OLDVEC[i] = mat:GetTranslation()
+			--NEWVEC[i] = mat:GetTranslation()-delta
+			--delta:Rotate(Angle(0,0,0))
+			if LeftArmBone[amd:GetBoneName(i)] or LeftArmBone[amd:GetBoneName(amd:GetBoneParent(i))] then
+				mat:SetTranslation(mat:GetTranslation()-deltaL)
+				amd:SetBoneMatrix( i, mat )
+				--print("?")
+			end
+		end
+
+
+	end
+
 	local RawBonePosAng = {}
 	--local final = (p:GetNWFloat("savee_armmelee_lastmelee")+(am:SequenceDuration()-Anim[3]-Anim[4])/PBR)
 	local final = (AData.AnimStartTime+(am:SequenceDuration()-AData.Offset_StartTime-AData.Offset_EndTime)/PBR)
 
 	local LerpVal = math.min(1,(CurTime()-AData.AnimStartTime)*PBR*3)
+	local DoQueue = AData.InQueue
 	if CurTime() >= final then
 		LerpVal = 1-math.min((CurTime()-final)*3,1)
+		DoQueue = nil
 	end
 	for i = 0, nb - 1 do
 			--do break end
@@ -1425,7 +1692,9 @@ hook.Add("PreDrawPlayerHands","savee_svmal_stuff",function(hand,vm,p) --干预�
 			分2批次,先同步手骨,再同步武器骨骼
 			这么做是为了避免骨骼优先级问题(如c_irifle,它将枪械骨骼放到了第一位,这意味着枪械骨骼将被优先读取)
 		]]
-		if iAM then
+		local AName = iAM and AnimMdl:GetBoneName(iAM)
+		if iAM and AName != "__INVALIDBONE__" and (!AData.OneHand or !RightArmBone[name]) then
+			--print(name,i)
 			local matAM = AnimMdl:GetBoneMatrix( iAM )
 			--print(":1")
 			--print(iAM)
@@ -1434,17 +1703,22 @@ hook.Add("PreDrawPlayerHands","savee_svmal_stuff",function(hand,vm,p) --干预�
 			then 
 				continue
 			end
-			--print("你存在吗")
-			mat:SetTranslation(LerpVector(LerpVal,mat:GetTranslation(),matAM:GetTranslation()))
-			mat:SetAngles(LerpAngle(LerpVal,mat:GetAngles(),matAM:GetAngles()))
+			local iAMD = amd:LookupBone(name)
+			local matD = amd:GetBoneMatrix(iAMD or -1)
+			local DoDelta = DoQueue and iAMD and matD and true
+			--print(DoDelta)
+			--print(!AData.OneHand , !RightArmBone[name])
+			mat:SetTranslation(LerpVector(LerpVal,(DoDelta and matD:GetTranslation() or mat:GetTranslation()),matAM:GetTranslation()))
+			mat:SetAngles(LerpAngle(LerpVal,(DoDelta and matD:GetAngles() or mat:GetAngles()),matAM:GetAngles()))
 			--mat:Invert()
 			--mat:SetAngles(mat:GetAngles())
 			--mat:SetTranslation(mat:GetTranslation())
 			--print(math.min(1,(CurTime()-final)*3))
-		else
-			local pbi = truevm:GetBoneParent(i)
-			local ParentMatrix = truevm:GetBoneMatrix(pbi)
+		elseif !iAM or AName == "__INVALIDBONE__" then --同步没有的骨骼
+			local pbi = vm:GetBoneParent(i)
+			local ParentMatrix = vm:GetBoneMatrix(pbi)
 			if !ParentMatrix then continue end
+			--print(name,i,vm:GetBoneName(pbi))
 			local OldLPos,OldLAng = WorldToLocal(RawBonePosAng[i].pos,RawBonePosAng[i].ang,RawBonePosAng[pbi].pos,RawBonePosAng[pbi].ang)
 			local LPos,LAng = LocalToWorld(OldLPos,OldLAng,ParentMatrix:GetTranslation(),ParentMatrix:GetAngles())
 			mat:SetTranslation(LPos)
@@ -1482,13 +1756,13 @@ concommand.Add("svmal_debug_playanim",function(p,_,a)
 end)
 concommand.Add("svmal_debug_playanimL",function(p,_,a)
 	SVMAL.StartAnimation({
-		Anim = a[1] or "jump_AR",
-		Offset_StartTime = a[2] or 0,
-		Offset_EndTime = a[3] or 0,
+		Anim = "gesture_item_give_original",
+		Model = p:GetModel(), --"models/Combine_Super_Soldier.mdl",
+		Offset_StartTime = 0.15,
+		Offset_EndTime = 0.45,
+		--Queue = true,
 	})
-end)
-concommand.Add("swmal_debug_playanimL",function(p,_,a)
-	SVMAL.StartWMAnimation(p,{
+	--[[SVMAL.StartAnimation({
 		Anim = "barrelpush",
 		Offset_StartTime = 0.15,
 		Offset_EndTime = 0.45,
@@ -1496,20 +1770,53 @@ concommand.Add("swmal_debug_playanimL",function(p,_,a)
 		OneHand = false,
 		NoPitch = false,
 		RotateAng = Angle(0,0,0),
+		Queue = true,
+	})]]
+	SVMAL.StartAnimation({
+		Anim = "console_type",
+		Model = "models/Combine_Super_Soldier.mdl",
+		Offset_StartTime = 0.15,
+		Offset_EndTime = 0.45,
+		OneHand = false,
+		NoPitch = false,
+		RotateAng = Angle(0,0,0),
+		Queue = true,
+	})
+end)
+concommand.Add("swmal_debug_playanimL",function(p,_,a)
+	SVMAL.StartWMAnimation(p,{
+		Anim = "gesture_item_give_original",
+		Offset_StartTime = 0.15,
+		Offset_EndTime = 0.45,
+		Model = p:GetModel(),
+		OneHand = true,
+		NoPitch = false,
+		--Spine = true,
+		RotateAng = Angle(0,0,0),
+		
 	})
 end)
 concommand.Add("swmal_debug_playanimSL",function(p,_,a)
 	for _,p in pairs(player.GetAll()) do
 		SVMAL.StartWMAnimation(p,{
-			Anim = "barrelpush",
+			Anim = "console_type",
 			Offset_StartTime = 0.15,
 			Offset_EndTime = 0.45,
-			Model = "models/Police.mdl",
+			Model = "models/Combine_Super_Soldier.mdl",
 			OneHand = false,
-			NoPitch = false,
+			NoPitch = !false,
 			Spine = !false,
 			RotateAng = Angle(0,0,0),
 		})
 	end
+end)
+
+net.Receive("SWMAL_BROADCASTANIMATIONINFO", function()
+
+	local p=net.ReadEntity()
+	local animtbl=net.ReadTable()
+	if p==LocalPlayer() then return end
+	SVMAL.StartWMAnimation(p,animtbl)
+
 end)
 

@@ -2,6 +2,7 @@ AddCSLuaFile()
 local dir = "svmal/"
 if SERVER then
 	AddCSLuaFile(dir.."svmal_cl_func.lua")
+	include(dir.."svmal_sv_func.lua")
 else
 	include(dir.."svmal_cl_func.lua")
 end
