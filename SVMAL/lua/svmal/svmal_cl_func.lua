@@ -383,12 +383,13 @@ function SVMAL.TryQueue()
 		QT.Queue = false
 		AnimMdlDelta:SetModel(AData.Model)
 		local Anim = isstring(AData.Anim) and AnimMdlDelta:LookupSequence(AData.Anim) or AData.Anim
-		AnimMdlDelta:ResetSequence(Anim)
+		AnimMdlDelta:SetSequence(Anim)
 		AnimMdlDelta:SetPlaybackRate(0)
 		AnimMdlDelta:SetCycle(AnimMdl:GetCycle())
 		--print(AnimMdl:GetModel(),QT.Model,AnimMdl:GetSequence())
 		SVMAL.StartAnimation(QT).InQueue = true
 		SVMAL.RemoveQueueTableData()
+		SVMAL._QUEUEDOUBLEHAND = !AData.OneHand
 
 	end
 
@@ -459,6 +460,7 @@ function SVMAL.StartAnimation(animtbl)
 
 	
 	--正事
+	SVMAL._QUEUEDOUBLEHAND = nil
 	if !NeedQueue and !OldAnimData.AllowOverride then
 
 		--初始化
@@ -673,6 +675,9 @@ end
 	pos2到pos1需要移动的距离
 ]]
 
+--因为 我要兼容INVSYS和其它什么东西
+--所以 ManipulateBone :(
+
 hook.Add("PrePlayerDraw","savee_svmal_tpvanim",function(p,fl)
 	--do return end
 	--local p=Entity(1)
@@ -680,6 +685,21 @@ hook.Add("PrePlayerDraw","savee_svmal_tpvanim",function(p,fl)
 
 
 	if !istable(p.SWMAL_AnimData) then return end
+
+	if !p.SWMAL_ManipulatedBoneData then
+
+		p.SWMAL_ManipulatedBoneData = {}
+
+		for i=0,p:GetBoneCount()-1 do
+
+			p.SWMAL_ManipulatedBoneData[i] = {
+				p:GetManipulateBonePosition(i),
+				p:GetManipulateBoneAngles(i)
+			}
+
+		end
+
+	end
 
 
 	
@@ -1156,7 +1176,7 @@ hook.Add("PreDrawPlayerHands","savee_svmal_stuff",function(hand,vm,p) --干预�
 	--end
 	--TFA Ins Shared Part,对,说你呢,你被解雇了
 	--兼容这个,兼容那个
-	--我杀你妈啊我日了
+	--我Cinema
 	--MWB现在在我的黑名单,因为它用renderoverride了
 	--RIG很奇怪所以做不到(懒)
 			--vm:ManipulateBoneAngles(0,Angle(500,1,5))
@@ -1264,7 +1284,7 @@ hook.Add("PreDrawPlayerHands","savee_svmal_stuff",function(hand,vm,p) --干预�
 					mat:SetTranslation(mat:GetTranslation()-deltaL)
 					--mat:SetAngles(ang2)
 					--print(RightArmBone[am:GetBoneName(i)])
-				elseif !AData.OneHand then
+				elseif !AData.OneHand or (AData.InQueue and SVMAL._QUEUEDOUBLEHAND) then
 					mat:SetTranslation(mat:GetTranslation()-deltaR)
 					--mat:SetAngles(ang1)
 					--mat:SetAngles(mat:GetAngles()+Angle(-15,15,0))
@@ -1328,8 +1348,10 @@ hook.Add("PreDrawPlayerHands","savee_svmal_stuff",function(hand,vm,p) --干预�
 
 					if LeftArmBone[amd:GetBoneName(i)] then
 						mat:SetTranslation(mat:GetTranslation()-deltaL)
-					elseif !AData.OneHand then
+					elseif !AData.OneHand or (AData.InQueue and SVMAL._QUEUEDOUBLEHAND) then
+						--print(amd:GetBoneName(i))
 						mat:SetTranslation(mat:GetTranslation()-deltaR)
+						--mat:SetTranslation(mat:GetTranslation()-deltaR)
 					end
 					if Invert then
 						local CurDeltaP,CurDeltaA = WorldToLocal(mat:GetTranslation(),mat:GetAngles(),vm:GetPos(),vm:GetAngles())
@@ -1414,7 +1436,15 @@ hook.Add("PreDrawPlayerHands","savee_svmal_stuff",function(hand,vm,p) --干预�
 				--print(name,i,iAM,AnimMdl:GetModel(),(iAM and AnimMdl:GetBoneName(iAM)=="__INVALIDBONE__"))
 				--国民护卫队模型支持
 				local AName = iAM and am:GetBoneName(iAM)
-				if iAM and AName != "__INVALIDBONE__" and (!AData.OneHand or !RightArmBone[name]) then
+				if iAM and AName != "__INVALIDBONE__" and 
+					(
+						(
+							!AData.OneHand or 
+							(AData.InQueue and CurTime() < final and SVMAL._QUEUEDOUBLEHAND)
+						) 
+						or !RightArmBone[name]
+					) 
+				then
 					--print(name,i)
 					local matAM = am:GetBoneMatrix( iAM )
 					--print(":1")
@@ -1428,8 +1458,20 @@ hook.Add("PreDrawPlayerHands","savee_svmal_stuff",function(hand,vm,p) --干预�
 					local iAMD = amd:LookupBone(name)
 					local matD = amd:GetBoneMatrix(iAMD or -1)
 					local DoDelta = DoQueue and iAMD and matD and true
-					mat:SetTranslation(LerpVector(LerpVal,(DoDelta and matD:GetTranslation() or mat:GetTranslation()),matAM:GetTranslation()))
-					mat:SetAngles(LerpAngle(LerpVal,(DoDelta and matD:GetAngles() or mat:GetAngles()),matAM:GetAngles()))
+					if AData.OneHand and SVMAL._QUEUEDOUBLEHAND and RightArmBone[name] then
+
+						--DoDelta = false
+						--local newLerpVal = math.max(1-LerpVal,0)
+						mat:SetTranslation(LerpVector(LerpVal,matAM:GetTranslation(),mat:GetTranslation()))
+						mat:SetAngles(LerpAngle(LerpVal,matAM:GetAngles(),mat:GetAngles()))
+						--print("RUN,IT's ONLY HOPE!")
+
+					else
+
+						mat:SetTranslation(LerpVector(LerpVal,(DoDelta and matD:GetTranslation() or mat:GetTranslation()),matAM:GetTranslation()))
+						mat:SetAngles(LerpAngle(LerpVal,(DoDelta and matD:GetAngles() or mat:GetAngles()),matAM:GetAngles()))
+
+					end
 					--mat:Invert()
 					--mat:SetAngles(mat:GetAngles())
 					--mat:SetTranslation(mat:GetTranslation())
@@ -1540,9 +1582,14 @@ hook.Add("PreDrawPlayerHands","savee_svmal_stuff",function(hand,vm,p) --干预�
 						--print("LHIK")
 					end
 					truevm:SetBoneMatrix( i, mat )
+					truevm:SetBonePosition(i,mat:GetTranslation(),mat:GetAngles())
 					for i=0,nb-1 do
 						local pbi = truevm:GetBoneParent(i)
-						if !MyAwsomeParentTable[pbi] then continue end
+						local name,pname = truevm:GetBoneName(i),pbi and truevm:GetBoneName(pbi)
+						if !MyAwsomeParentTable[pbi]
+							or RightArmBone[name] or RightArmBone[pname]
+							or LeftArmBone[name] or LeftArmBone[pname]
+						then continue end
 						--print(pbi)
 						MyAwsomeParentTable[i] = true
 						--print(truevm:GetBoneName(i),truevm:GetBoneName(pbi))
@@ -1554,6 +1601,7 @@ hook.Add("PreDrawPlayerHands","savee_svmal_stuff",function(hand,vm,p) --干预�
 						mat:SetTranslation(LPos)
 						mat:SetAngles(LAng)
 						truevm:SetBoneMatrix(i,mat)
+						truevm:SetBonePosition(i,mat:GetTranslation(),mat:GetAngles())
 					end
 				end
 				--mat:SetTranslation(Vector(0,0,0))
@@ -1652,6 +1700,7 @@ hook.Add("PreDrawPlayerHands","savee_svmal_stuff",function(hand,vm,p) --干预�
 			--delta:Rotate(Angle(0,0,0))
 			if LeftArmBone[amd:GetBoneName(i)] or LeftArmBone[amd:GetBoneName(amd:GetBoneParent(i))] then
 				mat:SetTranslation(mat:GetTranslation()-deltaL)
+				--mat:SetTranslation(Vector(0,0,0))
 				amd:SetBoneMatrix( i, mat )
 				--print("?")
 			end
@@ -1708,11 +1757,12 @@ hook.Add("PreDrawPlayerHands","savee_svmal_stuff",function(hand,vm,p) --干预�
 			local DoDelta = DoQueue and iAMD and matD and true
 			--print(DoDelta)
 			--print(!AData.OneHand , !RightArmBone[name])
+			--print(name,LerpVal)
 			mat:SetTranslation(LerpVector(LerpVal,(DoDelta and matD:GetTranslation() or mat:GetTranslation()),matAM:GetTranslation()))
 			mat:SetAngles(LerpAngle(LerpVal,(DoDelta and matD:GetAngles() or mat:GetAngles()),matAM:GetAngles()))
 			--mat:Invert()
 			--mat:SetAngles(mat:GetAngles())
-			--mat:SetTranslation(mat:GetTranslation())
+			--mat:SetTranslation(Vector())
 			--print(math.min(1,(CurTime()-final)*3))
 		elseif !iAM or AName == "__INVALIDBONE__" then --同步没有的骨骼
 			local pbi = vm:GetBoneParent(i)
@@ -1725,6 +1775,7 @@ hook.Add("PreDrawPlayerHands","savee_svmal_stuff",function(hand,vm,p) --干预�
 			mat:SetAngles(LAng)
 		end
 		truevm:SetBoneMatrix(i,mat)
+		truevm:SetBonePosition(i,mat:GetTranslation(),mat:GetAngles())
 
 	end
 	--vm:AddEffects(EF_PARENT_ANIMATES)
@@ -1756,13 +1807,6 @@ concommand.Add("svmal_debug_playanim",function(p,_,a)
 end)
 concommand.Add("svmal_debug_playanimL",function(p,_,a)
 	SVMAL.StartAnimation({
-		Anim = "gesture_item_give_original",
-		Model = p:GetModel(), --"models/Combine_Super_Soldier.mdl",
-		Offset_StartTime = 0.15,
-		Offset_EndTime = 0.45,
-		--Queue = true,
-	})
-	--[[SVMAL.StartAnimation({
 		Anim = "barrelpush",
 		Offset_StartTime = 0.15,
 		Offset_EndTime = 0.45,
@@ -1770,8 +1814,16 @@ concommand.Add("svmal_debug_playanimL",function(p,_,a)
 		OneHand = false,
 		NoPitch = false,
 		RotateAng = Angle(0,0,0),
+		--Queue = true,
+	})
+	SVMAL.StartAnimation({
+		Anim = "gesture_item_give_original",
+		Model = p:GetModel(), --"models/Combine_Super_Soldier.mdl",
+		Offset_StartTime = 0.15,
+		Offset_EndTime = 0.45,
 		Queue = true,
-	})]]
+		OneHand = true,
+	})
 	SVMAL.StartAnimation({
 		Anim = "console_type",
 		Model = "models/Combine_Super_Soldier.mdl",

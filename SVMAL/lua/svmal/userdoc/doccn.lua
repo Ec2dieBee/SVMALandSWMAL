@@ -13,7 +13,8 @@
 	具体动画应用参见Armmelee
 
 	TODO
-	解决针对叛乱沙暴武器包的铸币问题
+	解决针对叛乱沙暴武器包的铸币问题 --不用修了直接开摆
+	修VM的QUEUE
 	
 
 
@@ -76,13 +77,6 @@
 	>>Pro-Tip: 你可以直接调用SAVEE_TEMP_SVMAL_RELATEDSHIT,它就是AnimModel
 	>返还
 	>>CSEnt AnimModel(动画实体)
-	
-	>Function SVMAL.GetAnimModel()
-	>介绍
-	>>返还现在的AnimModel(动画实体)
-	>>Pro-Tip: 你可以直接调用SAVEE_TEMP_SVMAL_RELATEDSHIT,它就是AnimModel
-	>返还
-	>>CSEnt AnimModel(动画实体)
 
 	>Function SVMAL.GetAnimModelDelta()
 	>介绍
@@ -92,7 +86,7 @@
 	>返还
 	>>CSEnt 衔接用AnimModel(动画实体)
 
-	>Function SVMAL.GetCurrentAnimData(Table AnimationData)
+	>Function SVMAL.GetCurrentAnimData()
 	>Bug
 	>>不支持#Table,不知道为什么
 	>介绍
@@ -112,7 +106,7 @@
 
 	>Function SVMAL.RemoveQueueTableData(Number Index)
 	>介绍
-	>>移除QueueTable的一个值(如不填Index默认为1)
+	>>移除QueueTable的一个动画数据(如不填Index默认为1)
 
 	>Function SVMAL.SetAnimPlaying(Boolean state)
 	>介绍
@@ -158,13 +152,13 @@
 	>>Model String,要换的模型
 	>>OneHand Bool,左手执行动作
 	>>PlaybackRate Num,播放速度(默认1)
-	>>Offset_StartTime Num,开始时间偏移
-	>>Offset_EndTime Num,结束时间偏移
+	>>Offset_StartTime Num,开始时间偏移(秒)
+	>>Offset_EndTime Num,结束时间偏移(秒)
 	>>AllowOverride 是否允许被覆盖(String)
 	>>OnFinish Function,在动画结束后做什么
 	>>OnStart Function,在动画开始时做什么
-	>>Queue Bool,是否排队执行(当它被设置时不管动画能否被覆写都将排队执行)
-	>>KeepBoneData Bool,保留对骨骼的修改(换模型时无效..?) 好了
+	>>[未完成]Queue Bool,是否排队执行(当它被设置时不管动画能否被覆写都将排队执行)
+	>>KeepBoneData Bool,保留对骨骼的修改(换模型时无效..?)
 	>>AutoDecideHands Bool,[Armmelee支持] 自动决定是否使用左手(OneHand设置时无效) (默认开)?
 	>>RotateAng Angle,旋转角度
 	>>NoPitch bool,上下看时视觉模型不会跟着转
@@ -174,13 +168,13 @@
 	>>Model String,要换的模型
 	>>OneHand Bool,左手执行动作
 	>>PlaybackRate Num,播放速度(默认1) 
-	>>Offset_StartTime Num,开始时间偏移
-	>>Offset_EndTime Num,结束时间偏移
+	>>Offset_StartTime Num,开始时间偏移(秒)
+	>>Offset_EndTime Num,结束时间偏移(秒)
 	>>AllowOverride 是否允许被覆盖(String)
 	>>KeepBoneData Bool,保留对骨骼的修改(换模型时无效..?)(默认开)
 	>>RotateAng Angle,旋转角度
 	>>NoPitch bool,上下看时视觉模型不会跟着转
 	>>Spine bool,动画包括腰部(和头部)
-	>>Fullbody bool,全身动画
+	>>[未完成]Fullbody bool,全身动画
 
 ]]
